@@ -83,5 +83,48 @@ FAQ
         - 我们强烈推荐每运行一个生产者服务就在增加一个nsqd服务。nsqd 是一个相对轻量级的占用大量内存的程序。
         This pattern aids in structuring message flow as a consumption problem rather than a production one.另外一个优点是他本质是形成了一个独立的,可分享的topic数据仓库在被给的主机地址上。
         这个要求不是绝对的。只是比较简单。
-    - 
-   
+    - 为什么nsqlookupd 不能被生产者用来发现消息将被发送到哪里。
+        - nsq 提升了消费者一端的发现模型通过减轻配置负担
+    但是他没有对解决一个server 应该发布到哪儿没有任何意义。这是一个鸡和蛋的问题.这个不存在任何的优势对于发布问题
+    By co-locating nsqd (see question above), you sidestep this problem entirely (your service simply publishes to the local nsqd) and allow NSQ’s runtime discovery system to work naturally.
+    - 我只是想把nsqd 作为一个工作队列在一个单节点中。这种情况是否适合。
+        - 是的。nsqd 能单独运行的非常好。
+        nsqlookupd在大的分布式环境中是有益的。
+    - 我应该运行多少个nsqlookupd
+        - 这个主要是看你集群的规模和,nsqd 节点的数量和消费者的数量还有你想到达到的默认的容错率
+        一般来说,对于数百个消费者和host节点。3到5个就可以工作的很好了。nsqlookup 不要求和查询的回答同等。在集群的元数据是始终保持一致的。
+- 发送
+    - 我需要一个客户端用来发布信息吗
+        - 只需要使用http 就ok 了。他是简单的,容易的。在大部分的程序环境中都可以使用。在事实上大部分的nsq 的部署节点都是使用http 部署的
+    - 为什么强制客户端处理tcp 协议的pub 和mpub 协议
+        - 我们认为nsq 的默认操作模式应该是安全优先的。我们想这个协议是简单的和一致的。
+    - 什么时候一个 pub 和mpub 失败
+        - 1:  这topic 的名字不是正常的形式。比如字符不对或者长度不对。可以看[topic and channel name spec](https://nsq.io/clients/tcp_protocol_spec.html#notes)
+        - 2:消息太长了 (消息的长度可以作为nsqd 的一个参数)
+        - 3:topic 在消息传送到一半的被删除掉了
+        - 4:nsqd 在消息传递到一半的时候中途退出了
+        - 5:客户端连接失败了在发布的时候
+    - 我如何减少上述第三个场景的发生
+        - 删除topic 是一个相对来说不常见的操作。如果你需要删除一个topic。orchestrate the timing such that publishes eliciting topic creations will never be performed until a sufficient amount of time has elapsed since deletion.
+- 设计和理论
+    - 推荐的topic 和channels 的命名
+        - pass
+    - 单个的nsqd 能够支持多少个topic 和channels 的数量上的限制呢。
+        - 这个没有内部的限制数据。他只被主机上的cpu 的数量和内存大小限制
+    - How are new topics announced to the cluster?
+        - The first PUB or SUB to a topic will create the topic on an nsqd. Topic metadata will then propagate to the configured nsqlookupd. Other readers will discover this topic by periodically querying the nsqlookupd
+    - nsq 能做rpc 吗？
+        - 是的。他是可能的。但是他并不是为了这种情况而设计的。
+        - 我们准备发布一些文档能够有顺序的到底而不是同时到达。如果你们有兴趣的话。
+    - pynsq 特定的
+        - 为什么你们强制我们使用tornado
+            - pynsqd 原本就是设计用来作为一个专注于消费端上的一个包。而tornado 是python 里一个很简单的异步客户端的实现。
+            - tornado 的api是简单的而且性能也表现的非常好。
+        - tornado 的事件循环(IOLoop)对于publish 是必需的吗？
+            - 不是的。nsqd 暴露出http端(/pub和/mpub)for dead-simple programming language agnostic publishing.
+            如果你担心使用http 的过量损耗,没有必要。/mpub 会自动批量发送。
+        - 什么时候我将会使用writer 
+            - 当一个高性能和低损耗是必要的时候
+            - writer 使用tcp 协议的pub 和mpub 命令。使用tcp 协议将会比http 协议有更低的损耗
+        - 当我只是想要fire 和forget(我能够容忍一些消息丢失)
+            - 使用wirter ，但是不指定一个publish 方法的callback
