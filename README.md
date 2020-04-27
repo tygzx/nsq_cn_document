@@ -4,6 +4,7 @@
 ***
 * [Quick Start](#0)
 * [FEATURES & GUARANTEES](#1)
+* [FAQ](#2)
 <h3 id ="0">Quick Start</h3>
 跟着下面这些步骤将会在你自己的机器上运行一个小的NSQ集群。消息会被发送,消费,然后存在本地的磁盘上。
 
@@ -36,8 +37,11 @@
 
 Tips: 在本章中值得注意的是nsq_to_file 命令不是直接告诉产生topic test 的。它是直接从nsqlookupd 收到消息的，因为连接的原因，所以没有消息丢失？(这段话存疑,后面可能需要修改)
 
+***
+
 <h3 id ="1">FEATURES & GUARANTEES</h3>
 NSQ 是一个实时的发布消息的平台
+
 
 FEATURES
 - 支持
@@ -71,3 +75,13 @@ Guarantees
 - 消费者会寻找所有的生产者
     - 发现服务(nsqlookupd)是 designed to be eventually consistent。nsqlookupd 节点不调整和保存任何查询的状态和答案的。Network partitions do not affect availability in the sense that both sides of the partition can still answer queries. Deployment topology has the most significant effect of mitigating these types of issues.
 
+***
+
+FAQ
+- 部署
+    - nsqd 推荐的部署结构是什么？
+        - 我们强烈推荐每运行一个生产者服务就在增加一个nsqd服务。nsqd 是一个相对轻量级的占用大量内存的程序。
+        This pattern aids in structuring message flow as a consumption problem rather than a production one.另外一个优点是他本质是形成了一个独立的,可分享的topic数据仓库在被给的主机地址上。
+        这个要求不是绝对的。只是比较简单。
+    - 
+   
