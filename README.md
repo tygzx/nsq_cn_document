@@ -5,6 +5,7 @@
 * [Quick Start](#0)
 * [FEATURES & GUARANTEES](#1)
 * [FAQ](#2)
+* [PERFORMANCE](#3)
 <h3 id ="0">Quick Start</h3>
 跟着下面这些步骤将会在你自己的机器上运行一个小的NSQ集群。消息会被发送,消费,然后存在本地的磁盘上。
 
@@ -130,3 +131,35 @@ FAQ
             - writer 使用tcp 协议的pub 和mpub 命令。使用tcp 协议将会比http 协议有更低的损耗
         - 当我只是想要fire 和forget(我能够容忍一些消息丢失)
             - 使用wirter ，但是不指定一个publish 方法的callback
+***
+
+<h3 id ="0">PERFORMANCE</h3>
+
+- 分布式性能
+    - 代码的主仓库里包含了一个脚本(bench/bench.py).这个脚本能够自动执行一个并发测试.他包含了n个节点和一些运行的nsqd节点和一些运行的and some running load-generating utilities (PUB and SUB),然后解析他们的输出到一个汇总里
+- 设置
+    - The following runs reflect the default parameters of 6 c3.2xlarge, the cheapest instance type that supports 1gbit links. 3 nodes run an nsqd instance and the rest run instances of bench_reader (SUB) and bench_writer (PUB), to generate load depending on the benchmark mode.
+    ````shell
+        ./bench/bench.py --access-key=... --secret-key=... --ssh-key-name=..
+    ````
+- 生产者吞吐量
+    - 下面的这个并发测试只测量生产者容量。不需要其他额外的加载。这个消息的size 是100字节然后消息被分发到超过3个topic
+    > 
+        ./bench/bench.py --access-key=... --secret-key=... --ssh-key-name=... --mode=pub --msg-size=100 run
+    An ingress of ~2.07mm msgs/sec, 消费者大概197MB/S的宽带
+- 生产者和消费者的吞吐量
+    - 下面的这个并发测试更加真实的反应了真实世界中生产者和消费者的条件。同样的消息的大小是100byte.然后消息被发送到超过3个topic 里。each with a single channel (24 clients per channel).
+    >
+        ./bench/bench.py --access-key=... --secret-key=... --ssh-key-name=... --msg-size=100 run
+    - At an ingress of ~842k and egress of ~806k msgs/s, consuming an aggregate 156mb/s of bandwidth, we’re now maxing out the CPU capacity on the nsqd nodes. By introducing consumers, nsqd needs to maintain per-channel in-flight accounting so the load is naturally higher.消费者的数量是明显的比生产者的数量少的。因为使用者的命令是生产者的2倍Adding another 2 nodes (one nsqd and one load-generating) attains over 1mm msgs/s:
+    >
+        ./bench/bench.py --access-key=... --secret-key=... --ssh-key-name=... --msg-size=100 run
+- 单个节点的性能
+    - 免责声明:请记住nsq 的设计是为了用在分布式的潮流上的。单个节点的性能是重要的。但是这个不是我们想要实现的。同时。虽然并发测试是一件很愚蠢的事情，but here’s a few anyway to ignite the flame:
+
+    - GOMAXPROCS=1 (single publisher, single consumer)
+    >
+        ./bench.sh 
+    - GOMAXPROCS=4 (4 publishers, 4 consumers)
+    >
+        ./bench.sh 
