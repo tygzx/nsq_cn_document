@@ -6,6 +6,7 @@
 * [FEATURES & GUARANTEES](#1)
 * [FAQ](#2)
 * [PERFORMANCE](#3)
+* [Design](#4)
 <h3 id ="0">Quick Start</h3>
 跟着下面这些步骤将会在你自己的机器上运行一个小的NSQ集群。消息会被发送,消费,然后存在本地的磁盘上。
 
@@ -163,3 +164,23 @@ FAQ
     - GOMAXPROCS=4 (4 publishers, 4 consumers)
     >
         ./bench.sh 
+
+<h3 id ="4">Design</h3>
+如果你想看类似于ppt的请点击这个链接 [slide deck](https://speakerdeck.com/snakes/nsq-nyc-golang-meetup).
+
+nsq 是在simplequeue 基础上的项目。设计这个项目的目的主要是:
+- 为了支持高可用性和低消耗的架构
+- 满足更加强大的消息分发的需求
+- 限制单个进程的内存使用量(将一些消息存到磁盘上)
+- 消费者和生产者配置简单
+- provide a straightforward upgrade path
+- 性能提升
+
+- 简单的配置和管理者
+    - 单个nsqd实例是被设计用来即时处理多个流。流也被成为主题。每个主题有1到多个管道。每个管道receives a copy of all the messages for a topic. 在实践中,每个管道都对应着一个消费者服务。
+    - 主题和管道都不是事先配置好的。当第一次向主题发送消息时,主题将会自动创建当订阅某个主题的管道的时候管道将自动创建。
+    - 主题和管道都有自己独立的数据缓冲区防止一个很慢的消费者造成的对于其他管道的积压
+    - 每个管道都有可能有多个客户端连接。假设所以连接到同一个管道的客户端都在准备收到消息的状态,每个消息都会随机分发到一个客户端。比如看[图](https://f.cloud.github.com/assets/187441/1700696/f1434dc8-6029-11e3-8a66-18ca4ea10aca.gif)。
+    - 总结一下就是消息是一个消息会从一个主题中传送到多个管道中
+    (这就是每个管道收到主题的复制消息)。但是从管道到客户端是随机挑选的。
+    - nsq 也包括一个一个帮助的应用nsqlookupd:消费者能通过nsqlooked 找到单个nsqd 的实例的地址In terms of configuration, this decouples the consumers from the producers (they both individually only need to know where to contact common instances of nsqlookupd, never each other), reducing complexity and maintenance
