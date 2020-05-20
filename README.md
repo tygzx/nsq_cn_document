@@ -184,3 +184,19 @@ nsq 是在simplequeue 基础上的项目。设计这个项目的目的主要是:
     - 总结一下就是消息是一个消息会从一个主题中传送到多个管道中
     (这就是每个管道收到主题的复制消息)。但是从管道到客户端是随机挑选的。
     - nsq 也包括一个一个帮助的应用nsqlookupd:消费者能通过nsqlooked 找到单个nsqd 的实例的地址In terms of configuration, this decouples the consumers from the producers (they both individually only need to know where to contact common instances of nsqlookupd, never each other), reducing complexity and maintenance
+    - 每个nsqd有一个和nsqlookupd的tcp长连接。over which it periodically pushes its state这个信息通常用来告知是哪个nsqd江将发送给
+    nsqlookupd.然后发送给消费者。对于消费者来说。
+    一个http 请求/lookup 端是暴露用来拉的。
+    - 对于一个新的不同的主题的消费者。只需要简单的开启一个NSQ的客户端。在这个NSQ 客户端中简单的配置一下你的nsqlookupd实例的地址。然后其他的就无须改动了。极大的减少了服务器的开销和复杂度
+    - 提示: 在将来版本的实验性的nsqlookupd 中将被用来返回能够被连接的客户端地址或者其他的智能策略。The current implementation is simply all. Ultimately, the goal is to ensure that all producers are being read from such that depth stays near zero.还有很重要的一点提示:nsqd 和nsqlookupd这两个守护进程是被用来设计独立操作的。不需要通过任何一个兄弟进程来进行通信
+    - 我们认为有一种方式来查看,观测集群也是一件很重要的事情。因此我们内置了nsqadmin来做这件事情。它提供了一个网页界面来浏览topics/channels/consumers的统计和 inspect depth and other key statistics for each layer.此外它还支持一些管理命令。比如移除和置空一个管道(which is a useful tool when messages in a channel can be safely thrown away in order to bring depth back to 0).
+- 直接的升级之路
+    - 这是我们产品最大的优点。我们的产品系统处理大容量的交易事物。这些交易事物都建立在我们目前已经存在的消息工具上。因此我们需要一个办法来缓慢的有系统的来升级我们的基础设施的部分，在几乎没有任何影响的情况下。
+    - 第一 在生产者一侧，我们内置了nsqd 来匹配simplequeue.很特别的，nsqd暴露了一个http /put 接口，和simplequeue 是一样的to POST binary data (with the one caveat that the endpoint takes an additional query parameter specifying the “topic”). Services that wanted to switch to start publishing to nsqd only have to make minor code changes.
+    - 第二 我们内置了一些库在python 和go 之中This eased the transition on the message consumer side by limiting the code changes to bootstrapping. All business logic remained the same
+    - 最后。我们我们内置了一些工具方法用来兼容老的和新的组件。他们都是有效的在我们的examples文件夹下
+    - nsq_pubsub : 在一个nsq的集群中暴露一个pubsub的http 接口
+    - nsq_to_file : 将一个topic 里的消息持久化到一个文件里
+    - nsq_to_http: perform HTTP requests for all messages in a topic to (multiple) endpoints
+- 消除SPOFs
+    - nsq 是设计被用来分布式的
