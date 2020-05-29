@@ -199,4 +199,24 @@ nsq 是在simplequeue 基础上的项目。设计这个项目的目的主要是:
     - nsq_to_file : 将一个topic 里的消息持久化到一个文件里
     - nsq_to_http: perform HTTP requests for all messages in a topic to (multiple) endpoints
 - 消除SPOFs
-    - nsq 是设计被用来分布式的
+    - nsq 是设计被用来分布式的.nsqd 的客户端和所有的实例都是通过tcp进行连接的。在客户端和实例之间没有任何中间人,没有任何消息中间件和spof
+    ![image.png](https://upload-images.jianshu.io/upload_images/1250148-dca43ba92eee15f2.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+    这种架构减少了单链条的的需要。让你能够直接从所有的生产者之间消费。理论上对应生产者来说只要有足够多的client 。你的消息就能就确保处理。
+    对于nsqlookupd 来说。高的可用性可以通过多运行几个实例来保证。他们是不会互相交流的。数据始终是保持一致的。消费者能够拉在他们配置中的nsqdlookup的实例。然和将所有的消息合并在一起。即使节点出现问题也不会让系统产生停止
+- 确保消息传送到达
+    - nsq 确保一个消息至少被分发一次。复制消息是可能出现的、
+    Consumers should expect this and de-dupe or perform idempotent operations.
+    - 这种确保是被强制作为协议的一部分和运行按照以下的流程(假设客户端已经成功的连接和订阅了主题)
+        - 客户端他们已经准备好接收消息
+        - nsq 发送一个消息然后临时将他们存储在本地
+        - 客户端返回fin,req信号来告诉nsq 消息是发送成功了还是失败了。如何客户端没有回复nsq 。或者回复超时了。nsq 将会自动的将消息重新加入到队列之中
+    - 上述的措施将保证如果出现消息丢失的情况，那么一定是nsqd 突然shutdown了。在这种情况下任何在内存里的消息都是丢失
+    它将消息的丢失放在了最大限度的重要性上面。甚至这种情况也能减少。一个解决办法就是部署多余的nsqd对。因为you’ve written your consumers to be idempotent, doing double-time on these messages has no downstream impact and allows the system to endure any single node failure without losing messages.
+    The takeaway is that NSQ provides the building blocks to support a variety of production use cases and configurable degrees of durability.
+- 有限的内存的足印
+    - nsqd 提供了一个可配置的选项--mem-queue-size。这个选项将决定保存在内存中的消息的总数。如果这个队列的消息的强度超过了保存的消息的极限，那么这些消息将会被保存在磁盘上。这个内存一个被给的nsqd 进程将会被处理成mem-queue-size *
+    当然一个聪明的观察者已经意识到了这是一个方便的方法来获得一个高确保率的消息传递。通过将这个内存的值设置为1或者0。磁盘备份的队列是设计来恢复从未知的nsqd的停止上来恢复数据的
+    - 当然相对于消息传送上的保证上，我们也可以通过向nsqd 发送一个停止信号。来安全的保存当前在内存中的信息
+    - 一个提示。任何一个主题或者管道的名字以#ephemeral 为结尾的将不会保存到磁盘上。将会直接丢弃掉信息This enables consumers which do not need message guarantees to subscribe to a channel. 这些临时的管道也将会消息。在最后一次客户端断开连接的时候。对于一个临时的主题来说。他意味着至少一个管道被创建,被消费，然后被删除
+- 性能
+    
